@@ -325,3 +325,67 @@ R$ 6.355, os 12 meses no vermelho e pagando juros, R$ 2.090 de juros no ano, cr�
 Para usar na demo do agente: `DEMO_CUSTOMER_ID=2fad9515-3c09-4400-8269-d83fd4e2c063`
 (o snapshot local tem 200 usuários; confira se ele está lá com `grep` antes, ou regere com
 `make stage-evento EVENTO_USUARIOS=1000`).
+
+---
+
+## 9. Pagamento parcial de fatura — validado, existe
+
+O modo de pagamento está no **texto de `descr`** da categoria `Pagamento de fatura`
+(uma linha por usuário por mês, 12.000 no total). Três grafias por modo:
+
+| Modo | descr | Meses | Valor médio |
+|---|---|---|---|
+| integral | `pag fat cartao integral`, `pag fatura cartao integral`, `pag fat cart credito integral` | 8.823 | R$ 1.758,61 |
+| parcial | `pag fat cartao parcial`, `pag fatura cartao parcial`, `pag fat cart credito parcial` | 2.102 | R$ 1.163,02 |
+| mínimo | `pag fat cartao minimo`, `pag fatura cartao minimo`, `pag fat cart credito minimo` | 1.075 | R$ 261,50 |
+
+Regra segura para classificar: `descr LIKE '%integral' / '%parcial' / '%minimo'`.
+Não há campo de valor total da fatura, então **não dá para calcular o quanto ficou
+rotativo**; dá para saber o modo e o valor pago.
+
+### 9.1 Quantos clientes
+
+| Padrão no ano | Usuários |
+|---|---|
+| Pagaram o mínimo alguma vez | 529 |
+| Pagaram parcial alguma vez | 657 |
+| Sempre integral | 311 |
+| 3+ meses não integral | 588 |
+| 6+ meses não integral | 204 |
+| 3+ meses **seguidos** não integral | 245 |
+
+### 9.2 Relação com juros de limite (`debito conta juros lim`)
+
+| Modo da fatura | Meses | Com juros lim no mesmo mês | Juros lim médio | Juros lim no mês seguinte |
+|---|---|---|---|---|
+| integral | 8.823 | 5,5% | R$ 5,03 | 14,4% |
+| parcial | 2.102 | 48,8% | R$ 47,58 | 24,9% |
+| mínimo | 1.075 | 49,3% | R$ 105,33 | 24,5% |
+
+Pagar mínimo ou parcial multiplica por 9 a chance de juros de limite no mês, e o
+mínimo custa o dobro do parcial em juros. A relação é forte mas não determinística: em
+metade dos meses de pagamento parcial não aparece juros — a base sintética não amarra
+os dois. Para o agente, o **modo** já é sinal suficiente; não dependa do juros aparecer.
+
+### 9.3 Como entrar na bioimpedância
+
+Acrescentar à `vw_bioimpedancia_mensal`:
+
+```sql
+MAX(CASE WHEN nom_cate_micro = 'Pagamento de fatura' THEN
+      CASE WHEN descr LIKE '%minimo' THEN 'minimo'
+           WHEN descr LIKE '%parcial' THEN 'parcial'
+           ELSE 'integral' END END)                         AS modo_fatura,
+```
+
+e à `vw_bioimpedancia` anual: `COUNTIF(modo_fatura != 'integral') AS meses_fatura_nao_integral`
+e `COUNTIF(modo_fatura = 'minimo') AS meses_fatura_minimo`. Gatilho candidato: 3 meses
+seguidos não integral (245 usuários) — é o cliente entrando no rotativo antes de o juros
+pesar.
+
+### 9.4 A persona `2fad9515` nesse recorte
+
+Pagou parcial em 4 meses (fev, abr, mai, out) e nunca teve juros de limite; os 12 meses
+de juros dela são de **saldo devedor** (cheque especial), não de cartão. Serve para o
+dreno de cheque especial; para a narrativa de rotativo do cartão, escolher entre os 245
+com 3 meses seguidos não integral.
