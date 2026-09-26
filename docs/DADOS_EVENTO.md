@@ -446,3 +446,58 @@ a qual conta atrasou.
   custa R$ 207 por mês", tudo calculado, nada estimado.
 - Para o cheque especial, o agente só pode mostrar o valor pago e a tendência; qualquer
   "sua taxa é X" seria invenção.
+
+---
+
+## 11. Dados sintéticos complementares — `vita_sintetico` (gerado em 26/09)
+
+Script do time rodado como um só job no BigQuery, dataset novo `vita_sintetico` em
+`us-central1` (mesma location de `hackathon_dados`). A base real não foi tocada. Toda
+linha gerada tem coluna `origem`. Determinístico por `FARM_FINGERPRINT`: rerodar dá o
+mesmo resultado. **8 de 8 asserts de coerência passaram.**
+
+| Tabela | Linhas | O que é |
+|---|---|---|
+| `parametros_modelo` | 6 | constantes com procedência: rotativo 14% e mínimo 15% (inferidos da base), teto do cheque especial 8% e limite de encargos (regulatório, validar vigência), guardrails 35%/50% (decisão do time) |
+| `contrato_cheque_especial` | 1.000 | um por usuário: faixa de risco, taxa contratual, limite, saldo devedor implícito (= juros ÷ taxa) |
+| `posicao_investimentos` | 665 | CDB DI com liquidez diária: reserva de emergência (507), objetivo (157), cenário de demo (1) |
+| `catalogo_ofertas` | 9 | parcelamento de cheque especial, de fatura e crédito pessoal, por faixa A/B/C; faixa V não tem oferta |
+| `cadastro_personas` | 2 | nome fictício, idade, cidade, ocupação — **só para o front-end, nunca para o LLM** |
+
+### 11.1 Faixas de risco
+
+| Faixa | Usuários | Taxa CE | Limite médio | Uso médio do limite | Com saldo devedor hoje |
+|---|---|---|---|---|---|
+| A | 300 | 6,5% | R$ 4.680 | 0,3% | 3 |
+| B | 88 | 7,2% | R$ 6.250 | 10,7% | 39 |
+| C | 430 | 8,0% | R$ 6.063 | 3,5% | 83 |
+| V (vulnerável, sem oferta) | 182 | 8,0% | R$ 10.220 | 5,1% | 57 |
+
+### 11.2 As duas personas
+
+| | Bruno Carvalho (`2fad9515`) | Marcos Teixeira (`8fbc8ba3`) |
+|---|---|---|
+| Papel | persona principal | guardrail de vulnerabilidade |
+| Faixa | C (12 meses de juros CE) | V (crédito = 74% da renda) |
+| Taxa contratual CE | 8% a.m. | 8% a.m. |
+| Limite CE | R$ 25.000 | R$ 53.500 |
+| Saldo devedor CE implícito hoje | R$ 2.829 (11% do limite) | **R$ 0** |
+| Juros CE último mês | R$ 226,32 | R$ 0 |
+| CDB | R$ 3.600, "troca do carro", 103% do CDI | nenhum |
+
+**Cenário do Bruno fecha:** R$ 3.600 no CDB a ~1% a.m. contra R$ 2.829 no cheque
+especial a 8% a.m. A conversa "usar o CDB para quitar" é demonstrável só com tool.
+
+**Atenção com o Marcos:** os R$ 5.003 de juros dele no ano são de **cartão** (`juros
+lim`), não de cheque especial. Nesse modelo ele aparece sem dívida de CE. Se a cena do
+guardrail for sobre cheque especial, trocar de persona (há 57 usuários V com saldo
+devedor CE hoje); se for sobre rotativo do cartão, a cena funciona, mas as tabelas
+sintéticas de CE não entram nela.
+
+### 11.3 Próximo passo de engenharia
+
+Nada disso chega ao agente ainda. O `EventoDataSource` lê só o snapshot do extrato.
+Para a demo, as tabelas `contrato_cheque_especial`, `posicao_investimentos` e
+`catalogo_ofertas` precisam ser exportadas para `data/evento/` (a SA do Cloud Run não lê
+BigQuery) e expostas por tools novas, seguindo a regra: `customer_id` do estado, projeção
+sem PII, número só de tool. `cadastro_personas` fica **fora** do agente por desenho.
