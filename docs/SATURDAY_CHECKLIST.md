@@ -163,7 +163,7 @@ Agent Engine**. Cada restrição abaixo foi testada, não suposta:
 |---|---|---|
 | Cloud Build sem bucket | `forbidden from accessing the bucket [..._cloudbuild]` | `BUILD=local` (Docker Desktop aberto; `docker build --platform linux/amd64` + push) |
 | SA sem Vertex | `aiplatform.endpoints.predict denied` (impersonação) | `MODEL_KEY_SECRET=gemini-api-key` — **você** lê a chave e ela vai para a revisão |
-| Chave AI Studio no **free tier** | `generate_content_free_tier_requests, limit: 5` por minuto | smoke repete com espera de 20s; na demo, um turno por vez |
+| Chave AI Studio no **free tier** | `limit: 5` por minuto **e `limit: 20` por dia** por modelo (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`) | smoke repete com espera de 20s, mas **20 chamadas/dia não cobrem nem um smoke** (cada turno gasta 2–3). Peça aos organizadores chave com billing ou `aiplatform.user` para a SA — sem isso a demo tem ~7 turnos por dia |
 | SA sem Agent Engine | engine `6089108039007207424` criado, mas `aiplatform.sessions.create denied`; `setIamPolicy` negado no projeto e no recurso | `MEMORY_BACKEND=local` sem `AGENT_ENGINE_ID` → sessão no processo, `MAX_INSTANCES=1` forçado |
 | Sem Model Armor | `modelarmor.templates.create denied` | guard heurístico (`USE_MODEL_ARMOR=false`) |
 | SA sem BigQuery | papel ausente | `DATA_SOURCE=evento` + `make stage-evento` (snapshot na imagem, 200 usuários / 94 mil linhas) |
