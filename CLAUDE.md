@@ -27,6 +27,13 @@ Leitura na primeira vez, nesta ordem: `docs/BLUEPRINT.md` (o quadro completo), d
 6. **Não confie na memória sobre as APIs do ADK.** Ele muda rápido. Verifique na versão
    instalada (`agent/.venv`) antes de escrever código. Se algo não existir como esperado,
    diga em vez de inventar.
+7. **No projeto do evento (`batalha-time-06-1t82`), NÃO tente de novo o que já foi negado.**
+   A organização avisou: insistir em módulo negado **desclassifica o time**. Já negados em
+   26/09: Cloud Build (`builds submit`), qualquer alteração de IAM (projeto ou recurso),
+   criar SA ou repositório, Vertex AI e Agent Engine pela SA de runtime, Model Armor
+   (criar template ou chamar `sanitize`), aumento de cota da chave. Nada de contornar
+   por outro projeto. Detalhe e contorno de cada um: `docs/SATURDAY_CHECKLIST.md`,
+   Bloco 2.5. Se algo novo for negado, acrescente aqui na hora.
 
 ---
 
