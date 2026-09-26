@@ -34,6 +34,9 @@ Leitura na primeira vez, nesta ordem: `docs/BLUEPRINT.md` (o quadro completo), d
    (criar template ou chamar `sanitize`), aumento de cota da chave. Nada de contornar
    por outro projeto. Detalhe e contorno de cada um: `docs/SATURDAY_CHECKLIST.md`,
    Bloco 2.5. Se algo novo for negado, acrescente aqui na hora.
+8. **Projeto pessoal e projeto do evento não se misturam.** Nada de papel cruzado, recurso
+   compartilhado (template, engine, dataset, bucket, chave) ou credencial de uma conta usada
+   contra o projeto da outra. Confira `gcloud config list` antes de qualquer comando.
 
 ---
 
