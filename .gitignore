@@ -1,0 +1,12 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+data/synthetic/
+*.db
+.pytest_cache/
+.ruff_cache/
+.superpowers/
+agent/data/
+agent/artifacts/
+data/evento/
