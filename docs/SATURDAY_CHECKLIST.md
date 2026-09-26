@@ -139,45 +139,52 @@ Não silencie o teste — corrija a projeção.
 
 ---
 
-## Bloco 2.5 — O projeto do evento é de menor privilégio (verificado no dia)
+## Bloco 2.5 — O projeto do evento é de menor privilégio (verificado em 26/09)
 
 `batalha-time-06-1t82`, conta **`cassiandrei.central@gmail.com`**, tudo em **`us-central1`**.
 
+**Está no ar:** `https://batalha-agentes-996610300787.us-central1.run.app` (público).
+Verificado: `/list-apps`, pergunta numérica respondida por `get_transactions` com valor
+igual ao do snapshot local (14 transações, R$ 831,78), `/events` gerando abertura proativa.
+
 | Você **tem** | Você **não tem** |
 |---|---|
-| `run.admin`, `serviceAccountUser`, `cloudbuild.builds.editor` | criar service account |
-| `artifactregistry.writer` (push no repo `agentes`) | criar repositório |
-| `bigquery.admin` (ler `hackathon_dados.extrato_sintetico`) | alterar IAM do projeto |
-| `secretmanager.secretAccessor` (`gemini-api-key`, chave **AI Studio**) | `modelarmor.admin` |
+| `run.admin`, `serviceAccountUser`, `serviceAccountTokenCreator` | criar service account |
+| `artifactregistry.writer` (push no repo `agentes`) | criar repositório, bucket do Cloud Build |
+| `bigquery.admin` (ler `hackathon_dados.extrato_sintetico`) | alterar IAM do projeto **nem do engine** |
+| `aiplatform.user` (criar Agent Engine, chamar Vertex **você**) | `modelarmor.templates.create` |
+| `secretmanager.secretAccessor` (`gemini-api-key`, chave **AI Studio**) | |
 
 A SA de execução (`996610300787-compute@`) tem **só** `artifactregistry.writer`,
-`logging.logWriter` e `storage.admin`: **não lê BigQuery, Vertex nem Secret Manager**. Por
-isso o deploy do evento é assim, e não como no seu projeto pessoal:
+`logging.logWriter` e `storage.admin`: **não lê BigQuery, Vertex, Secret Manager nem
+Agent Engine**. Cada restrição abaixo foi testada, não suposta:
 
-- `MANAGED_IAM=0 RUNTIME_SA=996610300787-compute@developer.gserviceaccount.com` — sem criar SA/IAM
-- `MODEL_KEY_SECRET=gemini-api-key` — **você** lê a chave no deploy e ela vai para a revisão
-- `DATA_SOURCE=evento` + `make stage-evento` — snapshot do `extrato_sintetico` embarcado
-  na imagem (200 usuários / 94 mil linhas), porque a SA não consulta BigQuery ao vivo
-- `DEMO_CUSTOMER_ID=<um id_usuario do snapshot>` — `FICT-0001` não existe lá
-- `REGION=us-central1 MEMORY_LOCATION=us-central1` — o dado e a stack do evento estão lá
+| Restrição | Evidência | Como o deploy contorna |
+|---|---|---|
+| Cloud Build sem bucket | `forbidden from accessing the bucket [..._cloudbuild]` | `BUILD=local` (Docker Desktop aberto; `docker build --platform linux/amd64` + push) |
+| SA sem Vertex | `aiplatform.endpoints.predict denied` (impersonação) | `MODEL_KEY_SECRET=gemini-api-key` — **você** lê a chave e ela vai para a revisão |
+| Chave AI Studio no **free tier** | `generate_content_free_tier_requests, limit: 5` por minuto | smoke repete com espera de 20s; na demo, um turno por vez |
+| SA sem Agent Engine | engine `6089108039007207424` criado, mas `aiplatform.sessions.create denied`; `setIamPolicy` negado no projeto e no recurso | `MEMORY_BACKEND=local` sem `AGENT_ENGINE_ID` → sessão no processo, `MAX_INSTANCES=1` forçado |
+| Sem Model Armor | `modelarmor.templates.create denied` | guard heurístico (`USE_MODEL_ARMOR=false`) |
+| SA sem BigQuery | papel ausente | `DATA_SOURCE=evento` + `make stage-evento` (snapshot na imagem, 200 usuários / 94 mil linhas) |
 
-**Model Armor:** sem `modelarmor.admin` o template não pode ser criado; roda o guard
-heurístico (`USE_MODEL_ARMOR=false`). Peça aos organizadores, mas não conte com isso.
+`DEMO_CUSTOMER_ID` tem de ser um `id_usuario` do snapshot — `FICT-0001` não existe lá.
 
-**Agent Engine:** criar exige `aiplatform.reasoningEngines.create` — teste com
-`make agent-engine PROJECT_ID=batalha-time-06-1t82 MEMORY_LOCATION=us-central1` **depois** do
-`gcloud auth application-default login` como `central`. Se negar: `MEMORY_BACKEND=local
-MAX_INSTANCES=1` (sessão no processo; uma instância só) e declare a limitação.
+**Declare a limitação na banca, não esconda:** sessão no processo com uma instância é o
+fallback que o projeto de menor privilégio impõe; o backend gerenciado existe, está testado
+no projeto pessoal, e liga com uma variável quando a SA tiver `aiplatform.user`.
 
-Comando completo, primeiro em `DRY_RUN=1`:
+Comando que funcionou (primeiro em `DRY_RUN=1`):
 
 ```bash
-make deploy PROJECT_ID=batalha-time-06-1t82 AGENT_ENGINE_ID=<id> REGION=us-central1 \
-  MEMORY_LOCATION=us-central1 MANAGED_IAM=0 \
-  RUNTIME_SA=996610300787-compute@developer.gserviceaccount.com AR_REPO=agentes \
-  MODEL_KEY_SECRET=gemini-api-key DATA_SOURCE=evento MAX_INSTANCES=5 PUBLIC=1 \
-  DEMO_CUSTOMER_ID=00108ccd-699c-453a-a9f9-a66aad6e03e5
+make deploy PROJECT_ID=batalha-time-06-1t82 REGION=us-central1 MEMORY_LOCATION=us-central1 \
+  MANAGED_IAM=0 RUNTIME_SA=996610300787-compute@developer.gserviceaccount.com \
+  AR_REPO=agentes BUILD=local MODEL_KEY_SECRET=gemini-api-key DATA_SOURCE=evento \
+  MEMORY_BACKEND=local PUBLIC=1 DEMO_CUSTOMER_ID=00108ccd-699c-453a-a9f9-a66aad6e03e5
 ```
+
+Se os organizadores derem `aiplatform.user` à SA: acrescente `AGENT_ENGINE_ID=6089108039007207424
+MEMORY_BACKEND=agent_engine MAX_INSTANCES=5` e o restante não muda.
 
 ---
 

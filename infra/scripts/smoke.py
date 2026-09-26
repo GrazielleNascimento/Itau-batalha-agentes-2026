@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 import uuid
@@ -36,9 +37,19 @@ class Agente:
         )
         if self.token:
             req.add_header("Authorization", f"Bearer {self.token}")
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            corpo = r.read().decode()
-        return json.loads(corpo) if corpo.strip() else []
+        # Chave AI Studio no free tier: 5 req/min. O 429 do modelo chega como
+        # 500 do servidor; esperar e repetir custa menos que abortar o smoke.
+        for tentativa in range(4):
+            try:
+                with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                    corpo = r.read().decode()
+                return json.loads(corpo) if corpo.strip() else []
+            except urllib.error.HTTPError as e:
+                if e.code not in (429, 500, 503) or tentativa == 3:
+                    raise
+                print(f"    (HTTP {e.code}; espero 20s e repito)", file=sys.stderr)
+                time.sleep(20)
+        return []
 
     def nova_sessao(self) -> str:
         sid = f"smoke-{uuid.uuid4().hex[:8]}"

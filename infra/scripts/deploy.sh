@@ -53,10 +53,20 @@ if [[ -z "$PROJECT_ID" ]]; then
   exit 1
 fi
 
-if [[ -z "$AGENT_ENGINE_ID" ]]; then
+# MEMORY_BACKEND=local sem engine: projeto onde a SA de runtime não pode usar
+# o Agent Engine e ninguém pode conceder (o do evento). Sessão no processo,
+# logo UMA instância — senão o turno 2 cai onde a sessão não existe.
+MEMORY_BACKEND="${MEMORY_BACKEND:-agent_engine}"
+if [[ -z "$AGENT_ENGINE_ID" && "$MEMORY_BACKEND" == "local" ]]; then
+  echo "# AVISO: MEMORY_BACKEND=local sem AGENT_ENGINE_ID — sessão no processo, MAX_INSTANCES=1"
+  MAX_INSTANCES=1
+  ENGINE_ENV=""
+elif [[ -z "$AGENT_ENGINE_ID" ]]; then
   echo "erro: AGENT_ENGINE_ID é obrigatório (sessão e memória gerenciadas)." >&2
   echo "      Crie um para este projeto: make agent-engine PROJECT_ID=$PROJECT_ID" >&2
   exit 1
+else
+  ENGINE_ENV="GOOGLE_CLOUD_AGENT_ENGINE_ID=${AGENT_ENGINE_ID},GOOGLE_CLOUD_AGENT_ENGINE_LOCATION=${MEMORY_LOCATION},"
 fi
 
 if [[ "$MANAGED_IAM" == "0" ]]; then
@@ -127,7 +137,7 @@ else
   MODEL_ENV="GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_LOCATION=${MODEL_LOCATION}"
 fi
 
-ENV_VARS="${MODEL_ENV},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},REGION=${REGION},DATA_DIR=/code/data,DATA_SOURCE=${DATA_SOURCE},DEMO_MODE=true,DEMO_CUSTOMER_ID=${DEMO_CUSTOMER_ID:-FICT-0001},USE_MODEL_ARMOR=${USE_MODEL_ARMOR:-false},USE_RAG_ENGINE=false,GOOGLE_CLOUD_AGENT_ENGINE_ID=${AGENT_ENGINE_ID},GOOGLE_CLOUD_AGENT_ENGINE_LOCATION=${MEMORY_LOCATION},MEMORY_BACKEND=${MEMORY_BACKEND:-agent_engine},MEMORY_LOCATION=${MEMORY_LOCATION}"
+ENV_VARS="${MODEL_ENV},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},REGION=${REGION},DATA_DIR=/code/data,DATA_SOURCE=${DATA_SOURCE},DEMO_MODE=true,DEMO_CUSTOMER_ID=${DEMO_CUSTOMER_ID:-FICT-0001},USE_MODEL_ARMOR=${USE_MODEL_ARMOR:-false},USE_RAG_ENGINE=false,${ENGINE_ENV}MEMORY_BACKEND=${MEMORY_BACKEND},MEMORY_LOCATION=${MEMORY_LOCATION}"
 
 if [[ "$MANAGED_IAM" == "0" ]]; then
   IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}/${SERVICE}:$(date +%Y%m%d-%H%M%S)"
@@ -171,6 +181,10 @@ if [[ "$PUBLIC" == "1" ]]; then
 fi
 
 echo
-echo "# Serviço privado. Para conversar com ele:"
-echo "#   gcloud run services proxy ${SERVICE} --project=${PROJECT_ID} --region=${REGION}"
-echo "# Depois abra http://localhost:8080"
+if [[ "$PUBLIC" == "1" ]]; then
+  echo "# Serviço público: a URL acima responde sem token."
+else
+  echo "# Serviço privado. Para conversar com ele:"
+  echo "#   gcloud run services proxy ${SERVICE} --project=${PROJECT_ID} --region=${REGION}"
+  echo "# Depois abra http://localhost:8080"
+fi

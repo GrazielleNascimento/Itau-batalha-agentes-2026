@@ -141,6 +141,18 @@ def test_dry_run_usa_o_engine_informado(dry_run):
     assert "GOOGLE_CLOUD_AGENT_ENGINE_ID=engine-teste" in dry_run.stdout
 
 
+def test_memoria_local_dispensa_engine_e_forca_uma_instancia():
+    """Projeto de menor privilégio (o do evento): a SA de runtime não tem
+    aiplatform.sessions.create e ninguém pode conceder. Um engine configurado
+    sem permissão derruba o /run com 500. O modo local tem de ser explícito,
+    sem engine na revisão e com UMA instância — a sessão vive no processo."""
+    saida = _dry(AGENT_ENGINE_ID="", MEMORY_BACKEND="local", MAX_INSTANCES="5")
+    assert "GOOGLE_CLOUD_AGENT_ENGINE_ID" not in saida
+    assert "MEMORY_BACKEND=local" in saida
+    assert "--max-instances=1" in saida
+    assert "sessão no processo" in saida
+
+
 def _dry(**extra):
     script = RAIZ / "infra" / "scripts" / "deploy.sh"
     env = {
