@@ -389,3 +389,60 @@ Pagou parcial em 4 meses (fev, abr, mai, out) e nunca teve juros de limite; os 1
 de juros dela são de **saldo devedor** (cheque especial), não de cartão. Serve para o
 dreno de cheque especial; para a narrativa de rotativo do cartão, escolher entre os 245
 com 3 meses seguidos não integral.
+
+---
+
+## 10. Cálculo de juros — o que a base permite deduzir
+
+Os juros são lançados **uma vez por mês, no dia 28**, nas descrições
+`debito conta juros lim` (cartão) e `debito conta juros saldo dev` (cheque especial).
+Não há taxa em campo nenhum; o que dá para inferir vem da relação entre linhas.
+
+### 10.1 Cartão: regra determinística, taxa deduzível
+
+Nos meses de **pagamento mínimo** com juros de limite, a razão `juros_lim / valor_pago` é
+constante: **0,793** (p10, mediana e p90 iguais). Isso só fecha com duas constantes:
+
+| Constante | Valor | Verificação |
+|---|---|---|
+| Pagamento mínimo | **15% da fatura** | `pago = 0,15 × fatura` |
+| Taxa do rotativo | **14% ao mês** | `juros = 0,14 × (fatura − pago) = 0,119 × fatura`; `0,119 / 0,15 = 0,793` ✓ |
+
+Consequências práticas:
+
+- Em mês de mínimo, a **fatura total é reconstruível**: `fatura = pago / 0,15`, e o
+  saldo que foi para o rotativo é `pago × 5,67`.
+- Em mês parcial a razão varia (mediana 0,081) porque a fração paga varia; a fatura não é
+  reconstruível, mas o juros observado ÷ 0,14 dá o **saldo rotativo** daquele mês.
+- 14% a.m. ≈ 382% a.a. — é a taxa que o `compare_revolving_vs_installments` do agente
+  deve receber como `revolving_rate=0.14`, sem o modelo chutar.
+
+### 10.2 Cheque especial: estocástico, taxa NÃO deduzível
+
+| Evidência | Valor |
+|---|---|
+| Meses com juros de saldo devedor **sem** saldo negativo | 1.294 |
+| Meses com juros **e** saldo negativo | 941 |
+| Meses com saldo negativo sem juros | 993 |
+| Correlação juros × saldo negativo médio | 0,56 |
+| Taxa implícita (juros ÷ saldo negativo médio), mediana | 2,1% a.m. (p25 1,6%, p75 4,2%) |
+
+O gerador sintético não liga juros de saldo devedor ao saldo. Mais da metade dos meses
+com esse juros nem tem saldo negativo. **Não use `saldo_apos` para explicar ou projetar
+esse juros**; trate `juros saldo dev` como valor observado e ponto.
+
+### 10.3 Juros e multa por atraso
+
+`debito conta multa atraso` (446 linhas, média R$ 9,44) e `debito conta juros atraso`
+(33 linhas, média R$ 8,05), em dias variados do mês. Volume pequeno; não há como ligar
+a qual conta atrasou.
+
+### 10.4 O que isso significa para o agente
+
+- **Número nunca vem do LLM** continua valendo: o agente lê `juros_lim` e `juros saldo dev`
+  como fatos do extrato, e projeta cenários com as calculadoras determinísticas.
+- Para o rotativo, a taxa é conhecida (14% a.m.) e a regra do mínimo (15%) também: dá
+  para dizer ao cliente "você pagou R$ 261 de mínimo, ficou R$ 1.482 no rotativo e isso
+  custa R$ 207 por mês", tudo calculado, nada estimado.
+- Para o cheque especial, o agente só pode mostrar o valor pago e a tendência; qualquer
+  "sua taxa é X" seria invenção.
