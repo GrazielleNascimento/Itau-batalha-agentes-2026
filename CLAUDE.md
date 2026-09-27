@@ -34,6 +34,10 @@ Leitura na primeira vez, nesta ordem: `docs/BLUEPRINT.md` (o quadro completo), d
    (criar template ou chamar `sanitize`), aumento de cota da chave. Nada de contornar
    por outro projeto. Detalhe e contorno de cada um: `docs/SATURDAY_CHECKLIST.md`,
    Bloco 2.5. Se algo novo for negado, acrescente aqui na hora.
+   **Exceção dada pela organização (26/09, noite):** a SA `squad-agent-sa@…` tem
+   `aiplatform.user`, BigQuery e Secret Manager. Usá-la como `RUNTIME_SA` é o caminho
+   oficial, não reincidência. Model Armor e IAM continuam negados. **Nunca baixe nem
+   commite a chave JSON dela** — Cloud Run usa `--service-account`.
 8. **Projeto pessoal e projeto do evento não se misturam.** Nada de papel cruzado, recurso
    compartilhado (template, engine, dataset, bucket, chave) ou credencial de uma conta usada
    contra o projeto da outra. Confira `gcloud config list` antes de qualquer comando.
