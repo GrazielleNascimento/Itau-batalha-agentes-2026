@@ -501,3 +501,80 @@ Para a demo, as tabelas `contrato_cheque_especial`, `posicao_investimentos` e
 `catalogo_ofertas` precisam ser exportadas para `data/evento/` (a SA do Cloud Run não lê
 BigQuery) e expostas por tools novas, seguindo a regra: `customer_id` do estado, projeção
 sem PII, número só de tool. `cadastro_personas` fica **fora** do agente por desenho.
+
+---
+
+## 12. Bruno do rotativo — seleção e reconstrução da fatura (26/09)
+
+View nova `vita_sintetico.vw_fatura_mensal` (script em `infra/sql/selecao_bruno_rotativo.sql`):
+uma linha por usuário e mês com `modo`, `pago`, `juros_rotativo`, `fatura_total_reconstruida`
+(só em mês de mínimo: `pago / 0,15`) e `saldo_rotativo_reconstruido` (só com juros:
+`juros / 0,14`). As três grafias de cada modo são capturadas: 8.823 integral, 2.102
+parcial, 1.075 mínimo — bate com a seção 9.
+
+**A reconstrução fecha na base.** Exemplo, `36d74064`, março: pagou R$ 190,06 de mínimo
+→ fatura R$ 1.267,07; juros R$ 150,78 → saldo rotativo R$ 1.077,00 = fatura − pago.
+Os dois caminhos chegam ao mesmo número, o que confirma as constantes 15% e 14%.
+Observação: o juros aparece **no mesmo mês** do pagamento mínimo, não no seguinte.
+
+### 12.1 Candidatos (critério do time: 3+ faturas seguidas não integrais, 1+ mínimo, renda 6–10 mil, financiamento de imóvel, juros no último mês, fora da faixa V)
+
+| id_usuario | seguidos não integral | não integral no ano | mínimos | juros últ. mês | juros no ano | renda | parcelas | comprometimento | sobra | no snapshot local |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 36d74064-cc59-4ad2-9304-aeae46e660e4 | 3 | 6 | 5 | 101,51 | 708,28 | 7.116 | 2.681 | 37,7% | 4.435 | não |
+| ce90dcdc-c393-485c-9f92-5a56f671bd0c | 3 | 5 | 3 | 74,98 | 415,03 | 6.773 | 3.216 | 47,5% | 3.557 | não |
+| f89d1b4f-6e55-4626-8746-88217180eee6 | 4 | 9 | 3 | 69,82 | 853,40 | 6.834 | 2.341 | 34,3% | 4.493 | não |
+| 198fd3b8-5d5f-4b38-ad52-02464b769596 | 5 | 7 | 3 | 61,51 | 827,09 | 6.485 | 1.944 | 30,0% | 4.542 | **sim** |
+| 258bf045-e201-4b2c-adc3-7caf08828ec1 | 6 | 7 | 3 | 44,13 | 1.179,89 | 6.511 | 2.946 | 45,3% | 3.565 | **sim** |
+| 9b0b153b-1ae1-40e6-948a-d989d646f8c1 | 5 | 7 | 3 | 24,93 | 689,71 | 6.443 | 2.621 | 40,7% | 3.822 | não |
+
+Só 6 usuários passam em todos os critérios.
+
+### 12.2 Fatura mês a mês dos dois melhores para a tela
+
+`36d74064` (o de maior juros no último mês; renda 7,1 mil, a mais próxima dos 7,7 da persona):
+
+| mês | modo | pago | juros | fatura reconstruída | saldo rotativo |
+|---|---|---|---|---|---|
+| jan | integral | 1.422,17 | 0 | | |
+| fev | integral | 371,53 | 0 | | |
+| mar | mínimo | 190,06 | 150,78 | 1.267,07 | 1.077,00 |
+| abr | mínimo | 152,06 | 120,64 | 1.013,73 | 861,71 |
+| mai | mínimo | 227,05 | 180,12 | 1.513,67 | 1.286,57 |
+| jun | integral | 3.639,70 | 0 | | |
+| jul | integral | 721,21 | 0 | | |
+| ago | integral | 820,22 | 0 | | |
+| set | integral | 586,56 | 0 | | |
+| out | parcial | 294,84 | 14,77 | | 105,50 |
+| nov | mínimo | 177,05 | 140,46 | 1.180,33 | 1.003,29 |
+| dez | mínimo | 127,96 | 101,51 | 853,07 | 725,07 |
+
+Narrativa pronta: dois ciclos de mínimo (mar–mai e nov–dez), R$ 708 de juros no ano por
+faturas de pouco mais de mil reais, renda de 7,1 mil com 4,4 mil de sobra após parcelas —
+o problema é hábito, não falta de dinheiro. Ideal para o Tratamento de rotativo.
+
+`198fd3b8` (já está no snapshot de 200 usuários, comprometimento de 30%):
+
+| mês | modo | pago | juros | fatura reconstruída | saldo rotativo |
+|---|---|---|---|---|---|
+| jan | mínimo | 244,09 | 193,64 | 1.627,27 | 1.383,14 |
+| fev | mínimo | 171,27 | 135,88 | 1.141,80 | 970,57 |
+| mar–jul | integral | 453,91 a 1.452,33 | 0 | | |
+| ago | parcial | 2.726,69 | 219,74 | | 1.569,57 |
+| set | parcial | 1.185,27 | 54,49 | | 389,21 |
+| out | mínimo | 87,57 | 69,48 | 583,80 | 496,29 |
+| nov | parcial | 2.264,59 | 92,35 | | 659,64 |
+| dez | parcial | 1.279,37 | 61,51 | | 439,36 |
+
+### 12.3 Marcos (`8fbc8ba3`) na regra nova
+
+Renda 6.238, parcelas 4.605, sobra 1.633, comprometimento **73,8%**: continua V. A regra
+"sobra ≥ 600 e comprometimento < 50%" o mantém fora de oferta.
+
+### 12.4 Decisão pendente do time
+
+Se o Bruno for `36d74064`, o snapshot precisa ser regerado com todos os usuários
+(`make stage-evento EVENTO_USUARIOS=1000`, ~467 mil linhas na imagem) ou com uma lista
+explícita de ids. Se for `198fd3b8`, basta `DEMO_CUSTOMER_ID`. As personas do
+`vita_sintetico` (cadastro, CDB, contrato) foram geradas para `2fad9515` e precisam ser
+regeradas com o `persona_id` novo — o script é determinístico, é só trocar o DECLARE.
