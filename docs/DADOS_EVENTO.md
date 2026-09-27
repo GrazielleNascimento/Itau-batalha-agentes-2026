@@ -578,3 +578,45 @@ Se o Bruno for `36d74064`, o snapshot precisa ser regerado com todos os usuário
 explícita de ids. Se for `198fd3b8`, basta `DEMO_CUSTOMER_ID`. As personas do
 `vita_sintetico` (cadastro, CDB, contrato) foram geradas para `2fad9515` e precisam ser
 regeradas com o `persona_id` novo — o script é determinístico, é só trocar o DECLARE.
+
+---
+
+## 13. `vita_sintetico` v2 — regerado para o Bruno do rotativo (26/09)
+
+Script `infra/sql/vita_sintetico.sql` (v2) rodado como um só job. **10 de 10 asserts
+passaram.** Mudanças: persona `36d74064`, faixa de risco olha juros de rotativo e de
+cheque especial, faixa V também pelo mínimo existencial (sobra < R$ 600), limite de
+cheque especial no máximo ~2× a renda, tabela nova `perfil_risco` com o motivo da faixa.
+
+### 13.1 Faixas com motivo (tabela para o PRD)
+
+| Faixa | Motivo | Clientes |
+|---|---|---|
+| A | comprometimento < 35% e juros em menos de 4 meses | 187 |
+| B | juros em 4 a 8 meses | 172 |
+| C | comprometimento entre 35% e 50% | 300 |
+| C | juros em 9 ou mais meses | 59 |
+| V | comprometimento ≥ 50% | 182 |
+| V | sobra após parcelas abaixo do mínimo existencial | 100 |
+
+282 clientes (28%) ficam sem oferta de crédito por desenho.
+
+### 13.2 O Bruno em uma linha (dezembro/2025)
+
+| Campo | Valor |
+|---|---|
+| Faixa | C — comprometimento de crédito entre 35% e 50% (37,7%) |
+| Renda mensal | R$ 7.116,25 |
+| Sobra após parcelas | R$ 4.434,87 |
+| Fatura de dezembro | pagou o **mínimo**, R$ 127,96 |
+| Fatura total reconstruída | R$ 853,07 |
+| Saldo no rotativo | R$ 725,07 |
+| Juros do mês | R$ 101,51 (14% a.m.) |
+| CDB DI | **R$ 41.270**, 103% do CDI, "reserva de emergência" |
+
+**Ponto para o time decidir:** o CDB saiu em R$ 41.270 porque o Bruno **poupa** no ano
+(a regra dá 0,5 a 2× a poupança anual), e a garantia de "1,25× o rotativo" virou
+irrelevante. Narrativamente é forte — 41 mil parados a 1% a.m. enquanto paga 14% sobre
+725 — e é exatamente o comportamento de "contabilidade mental" que o produto quer
+atacar. Mas se a cena pedir um cliente apertado, o valor destoa; nesse caso fixar o CDB
+da persona (ex.: `GREATEST(..., 1000)` → valor declarado) no bloco 5.
